@@ -47,7 +47,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://devboard:devboard@postgres:5432/devboard
       REDIS_URL: redis://redis:6379/0
       RABBITMQ_URL: amqp://devboard:devboard@rabbitmq:5672/
-      DB_ENCRYPTION_KEY: ${DB_ENCRYPTION_KEY:-}
+      DB_ENCRYPTION_KEY: 9CzC5kDhpHa2ZVuuXVV+mV2xmUif12XFMs8E6y3e2Zg=
     depends_on:
       postgres:
         condition: service_healthy
