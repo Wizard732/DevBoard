@@ -53,18 +53,15 @@ const COLUMNS = [
 // ── ECDH + AES-256-GCM через Web Crypto API ──────────────────────────────────
 
 async function initSession(apiUrl: string): Promise<{ aesKey: CryptoKey; sessionId: string }> {
-  // 1. генерируем ECDH-пару на фронте
   const keyPair = await crypto.subtle.generateKey(
     { name: 'ECDH', namedCurve: 'P-256' },
     true,
-    ['deriveKey']
+    ['deriveBits']  // ← было 'deriveKey', должно быть 'deriveBits'
   );
 
-  // 2. экспортируем публичный ключ в DER (SubjectPublicKeyInfo) → base64
   const publicKeyDer = await crypto.subtle.exportKey('spki', keyPair.publicKey);
   const publicKeyB64 = btoa(String.fromCharCode(...new Uint8Array(publicKeyDer)));
 
-  // 3. отправляем на бэк, получаем публичный ключ бэка
   const res = await fetch(`${apiUrl}/session/init`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -72,7 +69,6 @@ async function initSession(apiUrl: string): Promise<{ aesKey: CryptoKey; session
   });
   const data = await res.json();
 
-  // 4. импортируем публичный ключ бэка
   const backendKeyBytes = Uint8Array.from(atob(data.public_key), c => c.charCodeAt(0));
   const backendPublicKey = await crypto.subtle.importKey(
     'spki',
@@ -82,10 +78,27 @@ async function initSession(apiUrl: string): Promise<{ aesKey: CryptoKey; session
     []
   );
 
-  // 5. выводим AES-256-GCM ключ из shared secret
-  const aesKey = await crypto.subtle.deriveKey(
+  // 1. получаем raw shared secret
+  const sharedBits = await crypto.subtle.deriveBits(
     { name: 'ECDH', public: backendPublicKey },
     keyPair.privateKey,
+    256
+  );
+
+  // 2. импортируем как HKDF-ключ
+  const hkdfKey = await crypto.subtle.importKey(
+    'raw', sharedBits, 'HKDF', false, ['deriveKey']
+  );
+
+  // 3. выводим AES-256-GCM ключ с теми же параметрами что на бэке
+  const aesKey = await crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new Uint8Array(0),  // salt=None в Python → пустой массив
+      info: new TextEncoder().encode('devboard-session'),  // ← должно совпадать с бэком
+    },
+    hkdfKey,
     { name: 'AES-GCM', length: 256 },
     false,
     ['encrypt', 'decrypt']
