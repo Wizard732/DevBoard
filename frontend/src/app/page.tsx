@@ -179,35 +179,60 @@ export default function KanbanBoard() {
   const wsRef = useRef<WebSocket | null>(null);
 
   const fetchTasks = async () => {
-    try {
-      const headers: Record<string, string> = {};
-      if (sessionRef.current) {
-        headers['X-Session-Id'] = sessionRef.current.sessionId;
-      }
+  try {
+    const headers: Record<string, string> = {};
 
-      const res = await fetch(`${apiUrlRef.current}/tasks`, { headers });
-      const data = await res.json();
-
-      if (sessionRef.current) {
-        const decrypted = await Promise.all(
-          (data as Task[]).map(async (task) => {
-            if (!task.description) {
-              return task;
-            }
-            return {
-              ...task,
-              description: await decryptDescription(sessionRef.current!.aesKey, task.description),
-            };
-          })
-        );
-        setTasks(decrypted);
-      } else {
-        setTasks(data);
-      }
-    } catch (err) {
-      console.error('Ошибка загрузки задач:', err);
+    if (sessionRef.current) {
+      headers["X-Session-Id"] = sessionRef.current.sessionId;
     }
-  };
+
+    const res = await fetch(`${apiUrlRef.current}/tasks`, {
+      headers,
+    });
+
+    const data = await res.json();
+
+    if (!sessionRef.current) {
+      setTasks(data);
+      return;
+    }
+
+    const decrypted = await Promise.all(
+      (data as Task[]).map(async (task) => {
+        if (!task.description) {
+          return task;
+        }
+
+        try {
+          const description = await decryptDescription(
+            sessionRef.current!.aesKey,
+            task.description
+          );
+
+          return {
+            ...task,
+            description,
+          };
+        } catch (error) {
+          console.error(
+            "Ошибка расшифровки задачи:",
+            task.id,
+            error
+          );
+
+          return {
+            ...task,
+            description: "[Ошибка расшифровки]",
+          };
+        }
+      })
+    );
+
+    setTasks(decrypted);
+  } catch (err) {
+    console.error("Ошибка загрузки задач:", err);
+  }
+};
 
   // инициализация сессии + загрузка задач + websocket
   useEffect(() => {
