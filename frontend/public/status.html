@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Статистика — DevBoard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, sans-serif;
+      background: #0f172a;
+      color: #f1f5f9;
+      padding: 40px 24px;
+      min-height: 100vh;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 40px;
+    }
+
+    h1 { font-size: 28px; font-weight: 700; }
+
+    a {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 14px;
+    }
+    a:hover { color: white; }
+
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+
+    .card {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+    }
+
+    .card .number {
+      font-size: 40px;
+      font-weight: 700;
+      color: #3b82f6;
+    }
+
+    .card .label {
+      font-size: 14px;
+      color: #94a3b8;
+      margin-top: 4px;
+    }
+
+    .chart-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 24px;
+      max-width: 600px;
+    }
+
+    .chart-box h2 {
+      font-size: 18px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      color: #cbd5e1;
+    }
+
+    .updated {
+      margin-top: 16px;
+      font-size: 12px;
+      color: #475569;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Статистика</h1>
+    <a href="/">← Kanban доска</a>
+  </div>
+
+  <!-- карточки с цифрами -->
+  <div class="cards">
+    <div class="card">
+      <div class="number" id="total">—</div>
+      <div class="label">Всего задач</div>
+    </div>
+    <div class="card">
+      <div class="number" id="todo">—</div>
+      <div class="label">Todo</div>
+    </div>
+    <div class="card">
+      <div class="number" id="in_progress">—</div>
+      <div class="label">In Progress</div>
+    </div>
+    <div class="card">
+      <div class="number" id="done">—</div>
+      <div class="label">Done</div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="number" id="priority-low">—</div>
+      <div class="label">Low</div>
+    </div>
+    <div class="card">
+      <div class="number" id="priority-medium">—</div>
+      <div class="label">Medium</div>
+    </div>
+    <div class="card">
+      <div class="number" id="priority-high">—</div>
+      <div class="label">High</div>
+    </div>
+  </div>
+
+  <!-- chart.js диаграмма -->
+  <div class="chart-box">
+    <h2>Задачи по статусам</h2>
+    <canvas id="statusChart"></canvas>
+    <p class="updated" id="updated-at">Обновляется каждые 15 секунд</p>
+  </div>
+
+  <script src="/js/start.js"></script>
+
+</body>
+</html>

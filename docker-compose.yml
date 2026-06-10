@@ -1,0 +1,104 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: devboard
+      POSTGRES_PASSWORD: devboard
+      POSTGRES_DB: devboard
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U devboard -d devboard"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: devboard
+      RABBITMQ_DEFAULT_PASS: devboard
+    ports:
+      - "5672:5672"
+      - "15673:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://devboard:devboard@postgres:5432/devboard
+      REDIS_URL: redis://redis:6379/0
+      RABBITMQ_URL: amqp://devboard:devboard@rabbitmq:5672/
+      DB_ENCRYPTION_KEY: ${DB_ENCRYPTION_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+  notifications:
+    build:
+      context: ./notification-service
+      dockerfile: Dockerfile
+    environment:
+      RABBITMQ_URL: amqp://devboard:devboard@rabbitmq:5672/
+      PORT: 3001
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-default_token}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-default_id}
+    ports:
+      - "3001:3001"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  telegram-bot:
+    build:
+      context: ./tg-bot
+      dockerfile: Dockerfile
+    environment:
+      BOT_TOKEN: ${BOT_TOKEN:-}
+      FASTAPI_URL: ${FASTAPI_URL:-http://backend:8000}
+    restart: unless-stopped
+    depends_on:
+      - backend
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - frontend
+      - backend
+      - notifications
+
+volumes:
+  postgres_data:
