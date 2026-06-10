@@ -1,29 +1,36 @@
 DevBoard
-Инфраструктура и запуск (Этап 1)
 
-Для работы приложения используются три основных сервиса: PostgreSQL, Redis и RabbitMQ. Все они настроены и запускаются через Docker Compose.
+1. Клонировать репозиторий:
+   git clone https://github.com/Wizard732/DevBoard.git && cd DevBoard
 
-1. Запуск сервисов (backend)
-2. Убедитесь что у вас установлен docker
-3. запустите docker в терминале командой docker compose up --build -d
 
-Этап 2 ТГ бот
-1. Установите библиотеку telegraf pip install telegraf
-2. Возьмите токен у botfather в telegram - https://t.me/botfather
-3. Добавьте токен в файл .env для безопасного использования
-4. Меняйте команды в bot.js на свои
+2. Создать .env и вписать токены Telegram:
+   Возьмите токен у botfather в telegram - https://t.me/botfather
+   cp .env.example .env
+   Затем введите токен своего бота и url активного backend сервера
 
-Этап 3 запуск frondend
-1. Возьмите токен у botfather в telegram - https://t.me/botfather
-2. Создайте файл .env img.png в папке tg-bot
-3. Затем введите токен своего бота и url активного backend сервера
-4. Сначала запустите сервер backend затем выполните команду npm start
 
-Этап 4 создание веб сайта
-1. Измените status.html, status.js, app/page.tsx под себя
-2. Создайте вайл .env.local в папке frondent и добавьте в него http адрес на свой сервер
+3. Запустить:
+   docker compose up --build -d
 
-Этап 5 шифрование
-1. Для шифрования использовалось ECDH для передачи по сетям, разшифрованный AES для шифрованния данных БД так-же IV для создания рандом 12 байт данных в каждом ключе
-2. Установите библиотеку cryptography для декодирования/кодированния ключей
-3. В базу данных передается зашифрованное описание чтобы его увидеть используйте swagger - img_1.png
+Открыть в браузере: **http://localhost:8080**
+
+# Адреса сервисов
+
+Канбан доска = http://localhost:8080 
+Статистика = http://localhost:8080/status 
+API (Swagger) = http://localhost:8080/api/docs 
+RabbitMQ UI = http://localhost:15673 — devboard/devboard 
+PostgreSQL = localhost:5433 
+
+# Стек
+
+Backend - FastAPI, SQLAlchemy 2.0 Async, PostgreSQL 15 
+Security - ECDH + AES-256-GCM (Web Crypto API + cryptography) 
+Messaging - RabbitMQ topic exchange, asyncio 
+Cache - Redis 7, distributed mutex, TTL 30s 
+Notifications - NestJS 11, Telegraf 
+Bot - Telegraf (Node.js), команды /add /list /done /delete 
+Frontend - Next.js 15, React 19, Three.js, WebSocket 
+Stats page - Vanilla JS, Chart.js — без фреймворков 
+Infra - Docker Compose, Nginx reverse proxy 
