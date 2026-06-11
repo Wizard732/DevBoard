@@ -36,14 +36,6 @@ class SessionInitResponse(BaseModel):
 @router.post("/session/init", response_model=SessionInitResponse)
 def session_init(body: SessionInitRequest):
 
-    # if send test return session_id = test-session
-    if body.public_key == "test":
-        session_store["test-session"] = b"0" * 32  # key for testing 
-        return {"public_key": "test", "session_id": "test-session"} # return default dictionary 
-    
-    
-
-
     # 1. декодируем публичный ключ фронта
     frontend_public_bytes = base64.b64decode(body.public_key)
     frontend_public_key: EllipticCurvePublicKey = load_der_public_key(frontend_public_bytes)
