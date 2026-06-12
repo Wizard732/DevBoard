@@ -5,6 +5,7 @@ import { useMemo, useState, useEffect, useRef } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
+
 interface Task {
   id: string;
   title: string;
@@ -247,88 +248,127 @@ export default function KanbanBoard() {
   }
 };
 
-  // инициализация сессии + загрузка задач + websocket
-  useEffect(() => {
-    initSession(apiUrlRef.current)
-      .then((session) => {
-        sessionRef.current = session;
-        setSessionReady(true);
-        console.log('Сессия инициализирована, session_id:', session.sessionId);
-        fetchTasks();
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.send(JSON.stringify({ type: 'session', session_id: session.sessionId }));
-        }
-      })
-      .catch((err) => {
-        console.error('Ошибка инициализации сессии:', err);
-        setSessionReady(true); // продолжаем работу даже без шифрования
-        fetchTasks();
-      });
+ // 1. Инициализация сессии + первичная загрузка задач 
+ // мы берем секретный ключ session id у сервера 
+useEffect(() => {
+  initSession(apiUrlRef.current)
+    .then((session) => {
+      sessionRef.current = session;
+      setSessionReady(true);
+      console.log('Сессия инициализирована, session_id:', session.sessionId);
+      fetchTasks();
+    })
+    .catch((err) => {
+      console.error('Ошибка инициализации сессии:', err);
+      setSessionReady(true); // продолжаем работу даже без шифрования
+      fetchTasks();
+    });
+}, []);
 
-    const ws = new WebSocket(wsUrlRef.current);
-    ws.onopen = () => {
-      wsRef.current = ws;
-      if (sessionRef.current) {
-        ws.send(JSON.stringify({ type: 'session', session_id: sessionRef.current.sessionId }));
-      }
-    };
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      const apply = async () => {
-        if (sessionRef.current && data.task && data.task.description) {
-          data.task.description = await decryptDescription(sessionRef.current.aesKey, data.task.description);
-        }
+// 2. Управление WebSocket-соединением
+useEffect(() => {
+  // Если сессия не готова, не открываем сокет
+  // если ключ не подходит или его нету мы не открываем ничего
+  if (!sessionReady) return;
 
-        if (data.event === 'task_created') setTasks((prev) => [data.task, ...prev]);
-        if (data.event === 'task_updated') setTasks((prev) => prev.map((t) => t.id === data.task.id ? data.task : t));
-        if (data.event === 'task_deleted') setTasks((prev) => prev.filter((t) => t.id !== data.task.id));
-      };
+  const ws = new WebSocket(wsUrlRef.current);
+  wsRef.current = ws; // Сразу сохраняем ссылку, чтобы иметь доступ извне
 
-      void apply();
-    };
-
-    return () => {
-      wsRef.current = null;
-      ws.close();
-    };
-  }, []);
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-
-    try {
-      let encryptedDescription = description;
-
-      // шифруем description если сессия есть
-      if (sessionRef.current && description.trim()) {
-        encryptedDescription = await encryptDescription(sessionRef.current.aesKey, description);
-      }
-
-      await fetch(`${apiUrlRef.current}/tasks`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // передаём session_id чтобы бэк знал каким ключом расшифровать
-          'X-Session-Id': sessionRef.current?.sessionId ?? '',
-        },
-        body: JSON.stringify({ title, description: encryptedDescription, priority, status: 'todo' }),
-      });
-
-      setTitle('');
-      setDescription('');
-      setPriority('medium');
-    } catch (err) {
-      console.error('Ошибка создания задачи:', err);
+  ws.onopen = () => {
+    console.log('WebSocket успешно подключен');
+    // Теперь сессия ТОЧНО есть в sessionRef.current
+    if (sessionRef.current?.sessionId) {
+      ws.send(JSON.stringify({ 
+        type: 'session', 
+        session_id: sessionRef.current.sessionId 
+      }));
     }
   };
 
+  ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
+    
+    // Внутренняя асинхронная функция для расшифровки контента
+    const apply = async () => {
+      // Расшифровываем описание задачи, если есть ключи
+      // если у нас есть aes ключ начинаем разшифровывать описание
+      if (sessionRef.current?.aesKey && data.task?.description) {
+        try {
+          data.task.description = await decryptDescription(sessionRef.current.aesKey, data.task.description);
+        } catch (decryptErr) {
+          console.error('Ошибка расшифровки задачи через сокет:', decryptErr);
+        }
+      }
+
+      // Обновляем стейт задач в реальном времени
+      if (data.event === 'task_created') {
+        // Защита от дублирования: добавляем, только если такой задачи еще нет в стейте
+        setTasks((prev) => prev.some(t => t.id === data.task.id) ? prev : [data.task, ...prev]);
+      }
+      if (data.event === 'task_updated') {
+        setTasks((prev) => prev.map((t) => t.id === data.task.id ? data.task : t));
+      }
+      if (data.event === 'task_deleted') {
+        setTasks((prev) => prev.filter((t) => t.id !== data.task.id));
+      }
+    };
+
+    // Вызываем функцию строго ВНУТРИ тела onmessage
+    void apply();
+  };
+    
+  ws.onerror = (error) => {
+    console.error('Ошибка WebSocket:', error);
+  };
+
+  // Очистка при размонтировании: закрываем сокет, чтобы не плодить утечки памяти
+  return () => {
+    if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+      ws.close();
+    }
+  };
+}, [sessionReady]); 
+
+
+// 3. Обработчик создания задачи
+const handleCreate = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!title.trim()) return;
+
+  try {
+    let encryptedDescription = description;
+
+    // шифруем description если сессия есть
+    if (sessionRef.current && description.trim()) {
+      encryptedDescription = await encryptDescription(sessionRef.current.aesKey, description);
+    }
+
+    await fetch(`${apiUrlRef.current}/tasks`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        // передаем зашифрованный session_id чтобы бэк знал каким ключом расшифровать 
+        'X-Session-Id': sessionRef.current?.sessionId ?? '',
+      },
+      body: JSON.stringify({ title, description: encryptedDescription, priority, status: 'todo' }), // отправляем на бэк в формате джсон
+    });
+
+    // Очищаем форму. Сама карточка прилетит автоматически через WebSocket в onmessage!
+    setTitle('');
+    setDescription('');
+    setPriority('medium');
+  } catch (err) {
+    console.error('Ошибка создания задачи:', err);
+  }
+};
+
   const handleMove = async (taskId: string, nextStatus: string) => {
+    // так же с методом патч
     try {
       await fetch(`${apiUrlRef.current}/tasks/${taskId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: nextStatus }),
+        headers: { 'Content-Type': 'application/json' },                             
+        body: JSON.stringify({ status: nextStatus }), // отправляем на бэк в формате джсон
       });
     } catch (err) {
       console.error('Ошибка обновления:', err);
